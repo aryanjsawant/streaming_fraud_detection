@@ -79,7 +79,7 @@ Login credentials (default):
 - Username: `admin`
 - Password: `admin`
 
-Navigate to Dashboards and click on 'Fraud Detection Dahboard' dashboard.
+Navigate to Dashboards and click on 'Fraud Detection Dashboard' dashboard.
 
 ![Select Dashboard](Select_dashboard.png)
 

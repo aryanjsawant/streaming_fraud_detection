@@ -1,0 +1,3 @@
+# Force linux line endings for shell and python scripts regardless of OS
+*.sh text eol=lf
+*.py text eol=lf

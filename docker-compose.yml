@@ -83,13 +83,23 @@ services:
       - KAFKA_BROKERS=broker:29092
       - KAFKA_TOPIC=raw_transactions
 
+  init-model:
+    image: python:3.8-slim
+    container_name: init-model
+    volumes:
+      - ./model_build:/model_build
+      - ./data_processor:/data_processor
+    working_dir: /model_build
+    command: >
+      bash -c "pip install -r requirements.txt && python training_data_generation.py && python ml_model.py && cp fraud_detection_model.pkl /data_processor/fraud_detection_model.pkl"
+
   spark-master:
     build:
       context: ./data_processor
       dockerfile: Dockerfile.spark  # Use the custom Dockerfile
     container_name: spark-master
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master", "--host", "0.0.0.0"]
     environment:
-      - SPARK_MODE=master
       - SPARK_RPC_AUTHENTICATION_ENABLED=no
       - SPARK_RPC_ENCRYPTION_ENABLED=no
       - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
@@ -105,9 +115,8 @@ services:
       context: ./data_processor
       dockerfile: Dockerfile.spark  # Use the custom Dockerfile
     container_name: spark-worker-1
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
     environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
       - SPARK_WORKER_MEMORY=1G
       - SPARK_WORKER_CORES=1
     depends_on:
@@ -120,21 +129,21 @@ services:
       context: ./data_processor
       dockerfile: Dockerfile.spark  # Use the custom Dockerfile
     container_name: spark-worker-2
+    command: ["/bin/bash", "-c", "mkdir -p /tmp/.ivy2 && cd /opt/spark-apps/ && /opt/spark/bin/spark-submit --conf spark.jars.ivy=/tmp/.ivy2 --master spark://spark-master:7077 --deploy-mode client --packages org.postgresql:postgresql:42.2.23,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1 fraud_detector.py"]
     environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
       - SPARK_WORKER_MEMORY=1G
       - SPARK_WORKER_CORES=1
+      - HOME=/tmp
     depends_on:
       - spark-master
       - spark-worker-1
       - timescaledb
       - producer
+      - init-model
     ports:
       - "8082:8081"  # Spark worker web UI
     volumes:
       - ./data_processor:/opt/spark-apps
-    command: ["/bin/bash", "-c", "cd /opt/spark-apps/ && /opt/bitnami/spark/bin/spark-submit --master spark://spark-master:7077 --deploy-mode client --packages org.postgresql:postgresql:42.2.23,org.apache.spark:spark-sql-kafka-0-10_2.12:3.1.2 fraud_detector.py"]
 
   timescaledb:
     image: timescale/timescaledb:latest-pg14
